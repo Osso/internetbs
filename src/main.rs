@@ -644,51 +644,36 @@ async fn handle_config(api_key: Option<String>, password: Option<String>) -> Res
     })
 }
 
+async fn handle_price(client: &InternetBsClient, tld: Option<String>, json: bool) -> Result<()> {
+    let result = client.account_pricelist().await?;
+    let filtered = filter_pricelist(&result, tld.as_deref());
+    if json {
+        println!("{}", serde_json::to_string_pretty(&filtered).unwrap());
+    } else {
+        print_pricelist(&filtered);
+    }
+    Ok(())
+}
+
 async fn handle_domain(client: &InternetBsClient, action: DomainAction, json: bool) -> Result<()> {
+    match action {
+        DomainAction::Price { tld } => return handle_price(client, tld, json).await,
+        _ => {}
+    }
     let result = match action {
         DomainAction::Check { domain } => client.domain_check(&domain).await?,
         DomainAction::Info { domain } => client.domain_info(&domain).await?,
-        DomainAction::List {
-            expiring,
-            search,
-            detailed,
-        } => {
-            client
-                .domain_list(expiring, search.as_deref(), detailed)
-                .await?
+        DomainAction::List { expiring, search, detailed } => {
+            client.domain_list(expiring, search.as_deref(), detailed).await?
         }
-        DomainAction::Create {
-            domain,
-            period,
-            clone_from,
-            ns,
-            private_whois,
-        } => {
-            client
-                .domain_create(&domain, period, &clone_from, ns.as_deref(), private_whois)
-                .await?
+        DomainAction::Create { domain, period, clone_from, ns, private_whois } => {
+            client.domain_create(&domain, period, &clone_from, ns.as_deref(), private_whois).await?
         }
         DomainAction::Renew { domain, period } => client.domain_renew(&domain, period).await?,
-        DomainAction::Update {
-            domain,
-            ns,
-            private_whois,
-            registrar_lock,
-        } => {
-            client
-                .domain_update(&domain, ns.as_deref(), private_whois, registrar_lock)
-                .await?
+        DomainAction::Update { domain, ns, private_whois, registrar_lock } => {
+            client.domain_update(&domain, ns.as_deref(), private_whois, registrar_lock).await?
         }
-        DomainAction::Price { tld } => {
-            let result = client.account_pricelist().await?;
-            let filtered = filter_pricelist(&result, tld.as_deref());
-            if json {
-                println!("{}", serde_json::to_string_pretty(&filtered).unwrap());
-            } else {
-                print_pricelist(&filtered);
-            }
-            return Ok(());
-        }
+        DomainAction::Price { .. } => unreachable!(),
     };
     print_response(json, &result);
     Ok(())
@@ -696,45 +681,18 @@ async fn handle_domain(client: &InternetBsClient, action: DomainAction, json: bo
 
 async fn handle_dns(client: &InternetBsClient, action: DnsAction, json: bool) -> Result<()> {
     let result = match action {
-        DnsAction::List {
-            domain,
-            record_type,
-        } => client.dns_list(&domain, record_type.as_deref()).await?,
-        DnsAction::Add {
-            name,
-            record_type,
-            value,
-            ttl,
-            priority,
-        } => {
-            client
-                .dns_add(&name, &record_type, &value, ttl, priority)
-                .await?
+        DnsAction::List { domain, record_type } => {
+            client.dns_list(&domain, record_type.as_deref()).await?
         }
-        DnsAction::Update {
-            name,
-            record_type,
-            current_value,
-            new_value,
-            ttl,
-            priority,
-        } => {
-            client
-                .dns_update(
-                    &name,
-                    &record_type,
-                    &current_value,
-                    &new_value,
-                    ttl,
-                    priority,
-                )
-                .await?
+        DnsAction::Add { name, record_type, value, ttl, priority } => {
+            client.dns_add(&name, &record_type, &value, ttl, priority).await?
         }
-        DnsAction::Remove {
-            name,
-            record_type,
-            value,
-        } => client.dns_remove(&name, &record_type, &value).await?,
+        DnsAction::Update { name, record_type, current_value, new_value, ttl, priority } => {
+            client.dns_update(&name, &record_type, &current_value, &new_value, ttl, priority).await?
+        }
+        DnsAction::Remove { name, record_type, value } => {
+            client.dns_remove(&name, &record_type, &value).await?
+        }
     };
     print_response(json, &result);
     Ok(())
